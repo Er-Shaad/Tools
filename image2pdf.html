@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image to PDF Converter</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://unpkg.com/jspdf-autotable@3.5.28/dist/jspdf.plugin.autotable.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -66,6 +65,7 @@
             cursor: pointer;
             font-size: 16px;
             transition: background-color 0.3s;
+            margin: 5px;
         }
         
         .btn:hover {
@@ -79,7 +79,6 @@
         
         .btn-convert {
             background-color: #27ae60;
-            margin-right: 10px;
         }
         
         .btn-convert:hover {
@@ -88,7 +87,6 @@
         
         .btn-download {
             background-color: #3498db;
-            margin-right: 10px;
         }
         
         .btn-download:hover {
@@ -255,6 +253,7 @@
             height: auto;
             border: 1px solid #ddd;
             border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         
         .pdf-name-input {
@@ -265,6 +264,21 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 16px;
+        }
+        
+        .button-group {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .pdf-info {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #3498db;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -316,7 +330,7 @@
             
             <div class="option-group">
                 <label for="pdfName">PDF Name:</label>
-                <input type="text" id="pdfName" placeholder="Enter PDF name (without .pdf)" value="images">
+                <input type="text" id="pdfName" placeholder="Enter PDF name" value="converted_images">
             </div>
         </div>
         
@@ -330,11 +344,12 @@
         <div class="pdf-preview-container" id="pdfPreviewContainer">
             <h3>PDF Preview (First Page)</h3>
             <img id="pdfPreview" class="pdf-preview" src="" alt="PDF Preview">
+            <div class="pdf-info" id="pdfInfo"></div>
         </div>
         
         <div class="status" id="status"></div>
         
-        <div style="text-align: center; margin-top: 20px;">
+        <div class="button-group">
             <button class="btn btn-convert" id="convertBtn" disabled>Generate PDF</button>
             <button class="btn btn-download" id="downloadBtn" disabled>Download PDF</button>
             <button class="btn btn-clear" id="clearBtn" disabled>Clear All</button>
@@ -358,10 +373,12 @@
         const pdfPreviewContainer = document.getElementById('pdfPreviewContainer');
         const pdfPreview = document.getElementById('pdfPreview');
         const pdfNameInput = document.getElementById('pdfName');
+        const pdfInfo = document.getElementById('pdfInfo');
         
         // Store uploaded files and generated PDF
         let uploadedFiles = [];
         let generatedPdf = null;
+        let pdfBlobUrl = null;
         
         // Event listeners for drag and drop
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -420,10 +437,8 @@
             createPreviews(imageFiles);
             updateButtons();
             
-            // Reset PDF preview when new files are added
-            generatedPdf = null;
-            pdfPreviewContainer.style.display = 'none';
-            downloadBtn.disabled = true;
+            // Reset PDF when new files are added
+            resetPDF();
         }
         
         // Update file info display
@@ -459,10 +474,8 @@
                             fileInfo.textContent = 'No files selected';
                         }
                         
-                        // Reset PDF preview when files are removed
-                        generatedPdf = null;
-                        pdfPreviewContainer.style.display = 'none';
-                        downloadBtn.disabled = true;
+                        // Reset PDF when files are removed
+                        resetPDF();
                     });
                     
                     preview.appendChild(img);
@@ -488,11 +501,21 @@
             updateButtons();
             hideStatus();
             
-            // Reset PDF preview
+            // Reset PDF
+            resetPDF();
+        });
+        
+        // Reset PDF data
+        function resetPDF() {
+            if (pdfBlobUrl) {
+                URL.revokeObjectURL(pdfBlobUrl);
+                pdfBlobUrl = null;
+            }
             generatedPdf = null;
             pdfPreviewContainer.style.display = 'none';
             downloadBtn.disabled = true;
-        });
+            pdfInfo.textContent = '';
+        }
         
         // Convert to PDF
         convertBtn.addEventListener('click', async function() {
@@ -503,11 +526,12 @@
                 hideStatus();
                 
                 // Get options
-                const pageSize = pageSizeSelect.value;
-                const orientation = orientationSelect.value;
-                const margin = parseInt(marginInput.value);
-                const imageFit = imageFitSelect.value;
-                const pdfName = pdfNameInput.value.trim() || 'images';
+                const pageSize = document.getElementById('pageSize').value;
+                const orientation = document.getElementById('orientation').value;
+                const margin = parseInt(document.getElementById('margin').value);
+                const imageFit = document.getElementById('imageFit').value;
+                let pdfName = pdfNameInput.value.trim();
+                if (!pdfName) pdfName = 'converted_images';
                 
                 // Create PDF
                 const pdf = new jsPDF({
@@ -575,11 +599,14 @@
                 
                 // Generate preview of first page
                 const pdfBlob = pdf.output('blob');
-                const pdfUrl = URL.createObjectURL(pdfBlob);
+                pdfBlobUrl = URL.createObjectURL(pdfBlob);
                 
                 // Show PDF preview (first page)
-                pdfPreview.src = pdfUrl;
+                pdfPreview.src = pdfBlobUrl;
                 pdfPreviewContainer.style.display = 'block';
+                
+                // Show PDF info
+                pdfInfo.textContent = `PDF will be saved as: ${pdfName}.pdf (${uploadedFiles.length} page${uploadedFiles.length !== 1 ? 's' : ''})`;
                 
                 // Enable download button
                 downloadBtn.disabled = false;
@@ -597,7 +624,9 @@
         downloadBtn.addEventListener('click', function() {
             if (!generatedPdf) return;
             
-            const pdfName = pdfNameInput.value.trim() || 'images';
+            let pdfName = pdfNameInput.value.trim();
+            if (!pdfName) pdfName = 'converted_images';
+            
             generatedPdf.save(`${pdfName}.pdf`);
         });
         
